@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Little Crumb Bakery (fictional) - widget demo</title>
+<style>
+  body { margin:0; font:16px/1.6 Georgia, "Times New Roman", serif; color:#3b2a20; background:#fffaf4; }
+  .hero { padding:70px 24px 50px; text-align:center; background:#f3e3d3; }
+  .hero h1 { font-size:42px; margin:0 0 8px; }
+  .tag { display:inline-block; font:13px system-ui, sans-serif; background:#fff; border:1px solid #e0c9b4; border-radius:999px; padding:3px 12px; }
+  .wrap { max-width:760px; margin:0 auto; padding:30px 24px 120px; }
+  pre { background:#2b2b2b; color:#f1f1f1; padding:14px; border-radius:8px; overflow-x:auto; font-size:13px; }
+  .cols { display:grid; grid-template-columns:repeat(3, 1fr); gap:16px; margin:24px 0; }
+  .cols div { background:#fff; border:1px solid #ecdccd; border-radius:10px; padding:14px; }
+  .cols b { display:block; }
+</style>
+</head>
+<body>
+  <div class="hero">
+    <h1>Little Crumb Bakery</h1>
+    <p>Sourdough, croissants and cakes, baked every morning.</p>
+    <span class="tag">Fictional business, made up for this demo</span>
+  </div>
+  <div class="wrap">
+    <div class="cols">
+      <div><b>Fresh bread</b>Out of the oven at 7:30 am and 4 pm.</div>
+      <div><b>Custom cakes</b>Order 3 days ahead.</div>
+      <div><b>Delivery</b>Within 8 km of the shop.</div>
+    </div>
+    <h2>This page shows the embeddable widget</h2>
+    <p>The chat bubble in the bottom-right corner comes from a single script tag. A business can paste the same tag into its own site (WordPress, Shopify, plain HTML) and point it at its server:</p>
+    <pre id="snippet"></pre>
+    <p>Click the bubble and ask about opening hours, prices or custom cake orders.</p>
+    <p><a href="/">← Back to the full demo</a></p>
+  </div>
+  <script>
+    document.getElementById("snippet").textContent =
+      '<script src="' + location.origin + '/widget.js" data-title="Ask Little Crumb" data-color="#8a4b2a" defer><\/script>';
+  </script>
+  <script src="/widget.js" data-title="Ask Little Crumb" data-color="#8a4b2a" defer></script>
+</body>
+</html>

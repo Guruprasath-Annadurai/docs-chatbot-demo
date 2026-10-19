@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Docs chatbot demo</title>
+<style>
+  :root { --ink:#1f2328; --muted:#656d76; --line:#d8dee4; --bg:#f6f8fa; --accent:#8a4b2a; --accent-soft:#f6ece6; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color:var(--ink); background:var(--bg); }
+  header { display:flex; align-items:center; gap:12px; padding:14px 24px; background:#fff; border-bottom:1px solid var(--line); }
+  header h1 { font-size:18px; margin:0; }
+  .badge { font-size:12px; padding:2px 8px; border-radius:999px; background:var(--accent-soft); color:var(--accent); }
+  header a { margin-left:auto; color:var(--accent); font-size:14px; }
+  main { display:grid; grid-template-columns: 300px 1fr; gap:20px; max-width:1100px; margin:20px auto; padding:0 20px; }
+  .card { background:#fff; border:1px solid var(--line); border-radius:10px; padding:16px; }
+  h2 { font-size:14px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); margin:0 0 10px; }
+  #docs { list-style:none; padding:0; margin:0 0 14px; }
+  #docs li { display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px dashed var(--line); font-size:14px; }
+  #docs small { color:var(--muted); }
+  .drop { display:block; border:2px dashed var(--line); border-radius:8px; padding:14px; text-align:center; color:var(--muted); font-size:14px; cursor:pointer; }
+  .drop.over { border-color:var(--accent); background:var(--accent-soft); }
+  #uploadStatus { font-size:13px; margin-top:8px; color:var(--muted); white-space:pre-line; }
+  .chat { display:flex; flex-direction:column; height:calc(100vh - 120px); min-height:480px; padding:0; }
+  #log { flex:1; overflow-y:auto; padding:18px; }
+  .msg { max-width:85%; margin:0 0 14px; }
+  .msg .bubble { padding:10px 14px; border-radius:12px; white-space:pre-line; }
+  .user { margin-left:auto; }
+  .user .bubble { background:var(--accent); color:#fff; border-bottom-right-radius:4px; }
+  .bot .bubble { background:var(--bg); border:1px solid var(--line); border-bottom-left-radius:4px; }
+  .bot.idk .bubble { background:#fff8e6; border-color:#f0d79a; }
+  .note { font-size:12px; color:var(--muted); margin-top:4px; }
+  .sources { margin-top:6px; font-size:13px; }
+  .sources summary { cursor:pointer; color:var(--muted); }
+  .source { border-left:3px solid var(--accent); padding:4px 8px; margin:6px 0; background:#fff; }
+  .source b { font-weight:600; }
+  .source span { color:var(--muted); }
+  form.ask { display:flex; gap:8px; padding:12px; border-top:1px solid var(--line); }
+  input, textarea { font:inherit; padding:9px 12px; border:1px solid var(--line); border-radius:8px; width:100%; }
+  button { font:inherit; padding:9px 16px; border:0; border-radius:8px; background:var(--accent); color:#fff; cursor:pointer; }
+  button.link { background:none; color:var(--accent); padding:0; text-decoration:underline; }
+  button:disabled { opacity:.6; cursor:default; }
+  .human { margin-top:8px; padding:12px; border:1px solid var(--line); border-radius:8px; background:#fff; display:grid; gap:8px; }
+  .hint { font-size:13px; color:var(--muted); margin:10px 0 0; }
+  @media (max-width: 800px) { main { grid-template-columns:1fr; } .chat { height:70vh; } }
+</style>
+</head>
+<body>
+<header>
+  <h1 id="botName">Docs chatbot</h1>
+  <span class="badge" id="mode">…</span>
+  <a href="/widget-demo">See the embeddable widget →</a>
+</header>
+<main>
+  <section class="card">
+    <h2>Documents</h2>
+    <ul id="docs"></ul>
+    <label class="drop" id="drop">
+      Drop PDF, DOCX, TXT or MD files here, or click to choose
+      <input type="file" id="file" multiple accept=".pdf,.docx,.txt,.md" hidden>
+    </label>
+    <div id="uploadStatus"></div>
+    <p class="hint">The bot only answers from these files. The sample files are for a made-up bakery.</p>
+  </section>
+  <section class="card chat">
+    <div id="log"></div>
+    <form class="ask" id="askForm">
+      <input id="question" placeholder="Ask something, e.g. What time do you open on Sunday?" autocomplete="off" maxlength="1000">
+      <button id="send">Ask</button>
+    </form>
+  </section>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+
+async function api(path, options = {}) {
+  const res = await fetch(path, options);
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(typeof body.detail === "string" ? body.detail : `Request failed (${res.status})`);
+  return body;
+}
+
+async function loadInfo() {
+  const h = await api("/api/health");
+  $("botName").textContent = h.bot_name;
+  $("mode").textContent = h.answer_mode === "llm" ? `AI answers (${h.llm_model})` : "Extractive mode, no AI model";
+  const { documents } = await api("/api/documents");
+  $("docs").replaceChildren(...documents.map(d => {
+    const li = el("li"); li.append(el("span", null, d.name), el("small", null, `${d.chunks} chunks`)); return li;
+  }));
+  if (!documents.length) $("docs").append(el("li", null, "No documents yet."));
+}
+
+function sourceLabel(s) {
+  return [s.source, s.page ? `page ${s.page}` : null, `chunk ${s.chunk}`].filter(Boolean).join(" · ");
+}
+
+function addMessage(who, text) {
+  const m = el("div", `msg ${who}`); m.append(el("div", "bubble", text));
+  $("log").append(m); $("log").scrollTop = $("log").scrollHeight; return m;
+}
+
+function humanForm(question) {
+  const f = el("form", "human");
+  f.innerHTML = '<b>Talk to a human</b><input name="name" placeholder="Your name" required maxlength="100">' +
+    '<input name="email" type="email" placeholder="Your email" required maxlength="200">' +
+    '<textarea name="question" rows="2" required maxlength="2000"></textarea><button>Send</button>';
+  f.elements.namedItem("question").value = question;
+  f.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    try {
+      const r = await api("/api/leads", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: f.elements.namedItem("name").value, email: f.elements.namedItem("email").value, question: f.elements.namedItem("question").value, page_url: location.href }) });
+      f.replaceChildren(el("div", null, r.message));
+    } catch (err) { f.append(el("div", "note", err.message)); }
+  });
+  return f;
+}
+
+function addAnswer(question, r) {
+  const m = addMessage(r.found ? "bot" : "bot idk", r.answer);
+  if (r.note) m.append(el("div", "note", r.note));
+  if (r.sources.length) {
+    const d = el("details", "sources"); d.open = true;
+    d.append(el("summary", null, `Sources (${r.sources.length})`));
+    r.sources.forEach(s => {
+      const box = el("div", "source");
+      box.append(el("b", null, sourceLabel(s)), el("span", null, `  match ${s.score}`), el("div", null, s.snippet));
+      d.append(box);
+    });
+    m.append(d);
+  }
+  if (r.offer_human) {
+    const b = el("button", "link", "Talk to a human"); b.type = "button";
+    b.onclick = () => { b.replaceWith(humanForm(question)); $("log").scrollTop = $("log").scrollHeight; };
+    m.append(b);
+  }
+  $("log").scrollTop = $("log").scrollHeight;
+}
+
+$("askForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const q = $("question").value.trim(); if (!q) return;
+  $("question").value = ""; $("send").disabled = true;
+  addMessage("user", q);
+  const thinking = addMessage("bot", "…");
+  try {
+    const r = await api("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question: q }) });
+    thinking.remove(); addAnswer(q, r);
+  } catch (err) { thinking.querySelector(".bubble").textContent = err.message; }
+  $("send").disabled = false; $("question").focus();
+});
+
+async function upload(files) {
+  if (!files.length) return;
+  const data = new FormData(); [...files].forEach(f => data.append("files", f));
+  $("uploadStatus").textContent = "Reading and indexing…";
+  try {
+    const r = await fetch("/api/documents", { method: "POST", body: data });
+    const body = await r.json();
+    if (!r.ok && !body.errors) throw new Error(body.detail || "Upload failed");
+    $("uploadStatus").textContent = [
+      ...body.indexed.map(i => `✓ ${i.name}: ${i.chunks} chunks`),
+      ...body.errors.map(i => `✗ ${i.name}: ${i.error}`)].join("\n");
+  } catch (err) { $("uploadStatus").textContent = err.message; }
+  loadInfo();
+}
+$("file").addEventListener("change", (e) => upload(e.target.files));
+const drop = $("drop");
+["dragenter", "dragover"].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.add("over"); }));
+["dragleave", "drop"].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.remove("over"); }));
+drop.addEventListener("drop", (e) => upload(e.dataTransfer.files));
+
+addMessage("bot", "Hi! Ask me anything about the documents on the left. If the answer isn't in them, I'll say so.");
+loadInfo().catch(err => $("mode").textContent = err.message);
+</script>
+</body>
+</html>
